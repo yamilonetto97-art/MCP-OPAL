@@ -2,25 +2,23 @@
 /**
  * opal-mcp-install — one-shot installer for the Google Opal MCP server.
  *
- * What it does:
- *   1. Globally installs `opal-mcp-server` so the dist path is stable.
- *   2. Resolves the absolute path to dist/index.js via `npm root -g`.
- *   3. Merges a `google-opal` entry into every detected MCP client config
- *      (Antigravity + Claude Desktop) without touching sibling entries.
- *   4. Opens Chrome with a persistent profile so the user signs in to
- *      Google once; captures the access token from outgoing requests.
- *   5. Saves the token and prints a "restart your MCP client" message.
+ * Diseño v0.3.2 — sin npm install -g.
+ *
+ * El bug crónico de v0.3.0/0.3.1: `npm install -g github:user/repo` en Windows
+ * tiene comportamiento impredecible con cache, optimizaciones de "ya está
+ * instalado", y reportes de éxito sin haber escrito todos los archivos.
+ *
+ * La solución de v0.3.2 es simple: cuando npx descarga el paquete para correr
+ * `opal-mcp-install`, los archivos YA ESTÁN en disco (en el cache de npx).
+ * Solo los copio a una ruta determinística que nosotros controlamos.
+ * Sin npm install. Sin cache. Sin --force. Solo `fs.cpSync`.
  *
  * Flags:
- *   --refresh        Skip install + config merge; just re-capture the token.
- *                    Use this when the token expires and silent refresh fails.
- *   --silent         Force the Chrome window to be hidden (only viable after
- *                    a prior interactive run when the profile already has cookies).
- *   --no-install     Skip `npm install -g` (assume the server is already global
- *                    or you intend to launch it via npx/local path).
- *   --help, -h       Show usage.
+ *   --refresh      Salta install + merge de config; solo recaptura el token.
+ *   --silent       Chrome headless (solo después de un login interactivo previo).
+ *   --no-install   Salta la copia (asume que ya está en la ruta estable).
+ *   --help, -h     Esta ayuda.
  */
-import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -32,10 +30,8 @@ import {
   ensureDir,
 } from './lib/paths.js';
 
-const PACKAGE_NAME = 'opal-mcp-server';
-// Pinneamos al tag para invalidar cache de npx/npm en cada release.
-const GITHUB_SPEC = 'github:yamilonetto97-art/MCP-OPAL#v0.3.1';
 const MCP_ENTRY_NAME = 'google-opal';
+const GITHUB_REPO = 'github:yamilonetto97-art/MCP-OPAL#v0.3.2';
 
 interface CliFlags {
   refresh: boolean;
@@ -58,13 +54,13 @@ function printHelp(): void {
 opal-mcp-install — instalador one-shot del MCP de Google Opal
 
 Uso:
-  npx -y -p github:yamilonetto97-art/MCP-OPAL#v0.3.1 opal-mcp-install            Instalación completa (recomendado)
-  npx -y -p github:yamilonetto97-art/MCP-OPAL#v0.3.1 opal-mcp-install --refresh  Solo re-capturar el token expirado
+  npx -y -p ${GITHUB_REPO} opal-mcp-install            Instalación completa (recomendado)
+  npx -y -p ${GITHUB_REPO} opal-mcp-install --refresh  Solo re-capturar el token expirado
 
 Flags:
   --refresh      Salta install + merge de config; solo recaptura el token
   --silent       Fuerza Chrome headless (solo funciona si ya hubo login previo)
-  --no-install   No corre 'npm install -g' (asume el server ya está instalado)
+  --no-install   Salta la copia (asume que el server ya está en la ruta estable)
   --help, -h     Muestra esta ayuda
 
 Después de la instalación, reiniciá tu cliente MCP (Antigravity / Claude Desktop)
@@ -72,106 +68,113 @@ para que detecte la nueva entrada "${MCP_ENTRY_NAME}".
 `);
 }
 
-function readPackageVersion(): string {
-  // dist/install.js → dist/ → package root
+/**
+ * Ruta determinística donde vive el MCP server después del install.
+ * NO depende de npm prefix ni del comportamiento de npm install -g.
+ */
+function getStableInstallDir(): string {
+  const platform = process.platform;
+  const home = process.env.USERPROFILE || process.env.HOME || '';
+  if (platform === 'win32') {
+    const local = process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local');
+    return path.join(local, 'opal-mcp', 'server');
+  }
+  if (platform === 'darwin') {
+    return path.join(home, 'Library', 'Application Support', 'opal-mcp', 'server');
+  }
+  return path.join(
+    process.env.XDG_DATA_HOME || path.join(home, '.local', 'share'),
+    'opal-mcp',
+    'server'
+  );
+}
+
+/**
+ * Detecta dónde vive el paquete actualmente en ejecución.
+ * Cuando npx corre `opal-mcp-install`, este archivo es
+ * <npx-cache>/node_modules/opal-mcp-server/dist/install.js
+ * por lo que la raíz del paquete es subir dos niveles.
+ */
+function getCurrentPackageRoot(): string {
   const here = path.dirname(fileURLToPath(import.meta.url));
-  const candidates = [
-    path.resolve(here, '..', 'package.json'),
-    path.resolve(here, '..', '..', 'package.json'),
-  ];
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) {
-      try {
-        const pkg = JSON.parse(fs.readFileSync(candidate, 'utf-8'));
-        if (pkg.name === PACKAGE_NAME && pkg.version) return pkg.version as string;
-      } catch { /* ignore */ }
-    }
+  return path.resolve(here, '..');
+}
+
+/**
+ * Copia el paquete completo (dist + node_modules + package.json + ...) desde
+ * el cache de npx a la ruta estable. Atómico-ish: limpia y re-copia.
+ */
+function installToStableLocation(): string {
+  const src = getCurrentPackageRoot();
+  const dst = getStableInstallDir();
+
+  console.log(`      · Origen: ${src}`);
+  console.log(`      · Destino: ${dst}`);
+
+  // Sanity check: el origen DEBE tener dist/index.js (lo que vamos a copiar).
+  const srcEntry = path.join(src, 'dist', 'index.js');
+  if (!fs.existsSync(srcEntry)) {
+    throw new Error(
+      `El paquete que se está ejecutando no tiene ${srcEntry}.\n` +
+      `Esto significa que el tarball que descargó npx está roto. Probá:\n` +
+      `  1. Borrá el cache de npx: rm -rf "%LOCALAPPDATA%\\npm-cache\\_npx" (Windows)\n` +
+      `  2. Reintentá el comando original.`
+    );
   }
-  return 'latest';
-}
 
-function isWindows(): boolean {
-  return process.platform === 'win32';
-}
+  // Limpieza atómica: borrar el destino entero antes de copiar.
+  if (fs.existsSync(dst)) {
+    console.log('      · Limpiando install previo…');
+    fs.rmSync(dst, { recursive: true, force: true });
+  }
+  fs.mkdirSync(dst, { recursive: true });
 
-function runNpm(args: string[]): { ok: boolean; stdout: string; stderr: string } {
-  const cmd = isWindows() ? 'npm.cmd' : 'npm';
-  const result = spawnSync(cmd, args, {
-    stdio: ['ignore', 'pipe', 'pipe'],
-    encoding: 'utf-8',
-    shell: isWindows(),
+  // Copia recursiva. cpSync es nativo desde Node 16.7+. Node 18+ es estable.
+  console.log('      · Copiando archivos…');
+  fs.cpSync(src, dst, {
+    recursive: true,
+    dereference: false,
+    errorOnExist: false,
+    force: true,
   });
-  return {
-    ok: result.status === 0,
-    stdout: (result.stdout || '').trim(),
-    stderr: (result.stderr || '').trim(),
-  };
-}
 
-function installGlobally(_version: string): void {
-  // Fuente canónica hasta que se publique en npm: se instala desde GitHub.
-  // El repo tiene dist/ pre-compilado, así que no necesita compilar nada.
-  const spec = GITHUB_SPEC;
-  console.log(`\n[1/4] Instalando ${spec} global vía npm (force, sin cache)…`);
-
-  // Paso 1a: desinstalar cualquier versión previa para que npm no decida "ya está".
-  console.log('      · Limpiando install previo (si existe)…');
-  runNpm(['uninstall', '-g', PACKAGE_NAME]);
-
-  // Paso 1b: limpiar el cache de tarballs/git de npm.
-  console.log('      · Limpiando cache de npm…');
-  runNpm(['cache', 'clean', '--force']);
-
-  // Paso 1c: instalar con --force para bypass de optimizaciones de cache.
-  const res = runNpm(['install', '-g', '--force', spec]);
-  if (!res.ok) {
-    console.error(res.stderr || res.stdout);
+  const dstEntry = path.join(dst, 'dist', 'index.js');
+  if (!fs.existsSync(dstEntry)) {
     throw new Error(
-      `npm install -g falló. ` +
-      `En macOS/Linux probá con sudo. ` +
-      `En Windows abrí una terminal nueva como Administrador y corré:\n` +
-      `  npm install -g --force ${spec}\n` +
-      `Después volvé a correr: npx -y -p ${spec} opal-mcp-install -- --no-install`
+      `Después de copiar a ${dst}, dist/index.js no aparece. ` +
+      `Esto NO debería pasar — reportar como bug.`
     );
   }
-  console.log('      OK');
-}
 
-function resolveServerEntry(): string {
-  const res = runNpm(['root', '-g']);
-  if (!res.ok || !res.stdout) {
-    throw new Error('No pude resolver `npm root -g`. ¿Está npm en tu PATH?');
-  }
-  const entry = path.join(res.stdout, PACKAGE_NAME, 'dist', 'index.js');
-  if (!fs.existsSync(entry)) {
+  // Verificación adicional: node_modules debe estar presente para que
+  // el server pueda importar @modelcontextprotocol/sdk, playwright-core, zod.
+  const nm = path.join(dst, 'node_modules');
+  if (!fs.existsSync(nm)) {
     throw new Error(
-      `El paquete global no expone dist/index.js en ${entry}.\n` +
-      `Esto suele pasar por un cache podrido de npm/npx. Corré a mano:\n` +
-      `  npm uninstall -g ${PACKAGE_NAME}\n` +
-      `  npm cache clean --force\n` +
-      `  npm install -g --force ${GITHUB_SPEC}\n` +
-      `Y después: ${GITHUB_SPEC.split('#')[0].replace('github:', 'https://github.com/')} (verificá que dist/ esté ahí en GitHub).`
+      `Después de copiar a ${dst}, node_modules no aparece. ` +
+      `npx debería haber instalado las deps antes de correr este script. ` +
+      `Probá reintentar con: npx --yes ${GITHUB_REPO}\n`
     );
   }
-  return entry;
+
+  return dstEntry;
 }
 
 function mergeMcpConfig(configPath: string, serverEntry: string): 'created' | 'updated' | 'unchanged' {
   ensureDir(path.dirname(configPath));
 
   let config: any = { mcpServers: {} };
-  let existed = fs.existsSync(configPath);
+  const existed = fs.existsSync(configPath);
   if (existed) {
     try {
       const raw = fs.readFileSync(configPath, 'utf-8');
       config = raw.trim() ? JSON.parse(raw) : { mcpServers: {} };
-    } catch (err: any) {
+    } catch {
       const backup = `${configPath}.corrupt-${Date.now()}.bak`;
       fs.copyFileSync(configPath, backup);
       console.warn(`      ⚠ El config existente no es JSON válido. Backup: ${backup}`);
       config = { mcpServers: {} };
     }
-    // Backup the good copy before overwriting.
     fs.copyFileSync(configPath, `${configPath}.bak`);
   }
 
@@ -196,8 +199,11 @@ function mergeMcpConfig(configPath: string, serverEntry: string): 'created' | 'u
   return existed ? 'updated' : 'created';
 }
 
-async function step_install(version: string): Promise<void> {
-  installGlobally(version);
+function step_install(): string {
+  console.log('\n[1/4] Copiando MCP server a ubicación estable…');
+  const entry = installToStableLocation();
+  console.log(`      OK — ${entry}`);
+  return entry;
 }
 
 function step_mergeConfigs(serverEntry: string): void {
@@ -208,7 +214,6 @@ function step_mergeConfigs(serverEntry: string): void {
     const parentExists = fs.existsSync(path.dirname(target.configPath));
     const fileExists = fs.existsSync(target.configPath);
     if (!parentExists && !fileExists && target.name !== 'Antigravity') {
-      // Don't auto-create Claude Desktop config if the app isn't installed.
       console.log(`      · ${target.name}: no instalado, salto.`);
       continue;
     }
@@ -227,7 +232,7 @@ function step_mergeConfigs(serverEntry: string): void {
 }
 
 async function step_captureToken(silent: boolean): Promise<void> {
-  console.log(`\n[3/4] Capturando token de Google Opal…`);
+  console.log('\n[3/4] Capturando token de Google Opal…');
   if (!silent) {
     console.log('      Se va a abrir una ventana de Chrome.');
     console.log('      Iniciá sesión con tu cuenta de Google que tiene acceso a Opal.');
@@ -247,7 +252,7 @@ async function step_captureToken(silent: boolean): Promise<void> {
 }
 
 function step_summary(serverEntry: string): void {
-  console.log(`\n[4/4] Listo.`);
+  console.log('\n[4/4] Listo.');
   console.log(`      MCP server: ${serverEntry}`);
   console.log(`      Token:      ${TOKEN_FILE}`);
   console.log(`      Perfil:     ${path.join(AUTH_DIR, 'chrome-profile')} (persistente)`);
@@ -257,7 +262,7 @@ function step_summary(serverEntry: string): void {
   console.log('   Probá: "Lista mis apps de Google Opal".');
   console.log('');
   console.log('Si el token expira en el futuro, el server intenta refrescarlo solo en background.');
-  console.log('Si eso falla, corré: npx -y -p github:yamilonetto97-art/MCP-OPAL#v0.3.1 opal-mcp-install --refresh');
+  console.log(`Si eso falla, corré: npx -y -p ${GITHUB_REPO} opal-mcp-install --refresh`);
 }
 
 async function refreshOnly(silent: boolean): Promise<void> {
@@ -273,22 +278,28 @@ async function main(): Promise<void> {
     return;
   }
 
-  console.log('🔮 Google Opal MCP — Instalador');
-  console.log('================================');
+  console.log('🔮 Google Opal MCP — Instalador v0.3.2');
+  console.log('======================================');
 
   if (flags.refresh) {
     await refreshOnly(flags.silent);
     return;
   }
 
-  const version = readPackageVersion();
-  if (!flags.noInstall) {
-    await step_install(version);
+  let serverEntry: string;
+  if (flags.noInstall) {
+    serverEntry = path.join(getStableInstallDir(), 'dist', 'index.js');
+    console.log('\n[1/4] Salto copia (--no-install). Usando install existente.');
+    if (!fs.existsSync(serverEntry)) {
+      throw new Error(
+        `--no-install pero ${serverEntry} no existe. ` +
+        `Corré sin --no-install primero para hacer el install completo.`
+      );
+    }
   } else {
-    console.log('\n[1/4] Salto npm install -g (--no-install).');
+    serverEntry = step_install();
   }
 
-  const serverEntry = resolveServerEntry();
   step_mergeConfigs(serverEntry);
   await step_captureToken(flags.silent);
   step_summary(serverEntry);
