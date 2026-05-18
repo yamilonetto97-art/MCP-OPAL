@@ -1,7 +1,7 @@
 {
   "name": "opal-mcp-server",
-  "version": "0.1.0",
-  "description": "MCP Server for Google Opal - Control AI mini-apps from your AI assistant",
+  "version": "0.2.0",
+  "description": "MCP Server for Google Opal - Control AI mini-apps via Google Drive API",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -13,8 +13,7 @@
     "prepare": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
-    "auth": "tsx src/auth/login.ts",
-    "postinstall": "npx playwright install chromium || echo Run npx playwright install chromium manually"
+    "auth": "tsx src/auth/login.ts"
   },
   "keywords": [
     "mcp",
@@ -22,8 +21,8 @@
     "opal",
     "ai",
     "model-context-protocol",
-    "playwright",
-    "automation"
+    "google-drive",
+    "oauth2"
   ],
   "license": "MIT",
   "repository": {
@@ -42,7 +41,6 @@
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
-    "playwright": "^1.52.0",
     "zod": "^3.24.4"
   },
   "devDependencies": {
