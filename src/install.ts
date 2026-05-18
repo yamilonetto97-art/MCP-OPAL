@@ -32,7 +32,7 @@ import {
 } from './lib/paths.js';
 
 const MCP_ENTRY_NAME = 'google-opal';
-const GITHUB_REPO = 'github:yamilonetto97-art/MCP-OPAL#v0.3.5';
+const GITHUB_REPO = 'github:yamilonetto97-art/MCP-OPAL#v0.3.6';
 const PACKAGE_NAME = 'opal-mcp-server';
 
 interface CliFlags {
@@ -280,8 +280,9 @@ async function step_captureToken(silent: boolean, manual: boolean): Promise<void
   if (manual) {
     console.log('      Modo manual forzado (--manual).');
   } else if (!silent) {
-    console.log('      Plan A: se abre Chrome y vos logueás. Si Google bloquea o algo falla,');
-    console.log('      automáticamente paso a Plan B (instrucciones manuales).');
+    console.log('      Intentando importar tu sesión de Chrome…');
+    console.log('      Si tu Chrome está logueado en Google, NO necesitás loguear de nuevo.');
+    console.log('      Tip: si Chrome del sistema está abierto, cerralo para que pueda leer cookies.');
   }
   ensureDir(AUTH_DIR);
   try {
@@ -323,7 +324,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  console.log('🔮 Google Opal MCP — Instalador v0.3.5');
+  console.log('🔮 Google Opal MCP — Instalador v0.3.6');
   console.log('======================================');
 
   if (flags.refresh) {

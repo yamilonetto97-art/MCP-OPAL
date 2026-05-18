@@ -1,4 +1,6 @@
 import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import * as readline from 'readline';
 import { chromium, type BrowserContext } from 'playwright-core';
 import { AUTH_DIR, CHROME_PROFILE_DIR, TOKEN_FILE, ensureDir } from '../lib/paths.js';
@@ -199,11 +201,127 @@ async function manualCapture(): Promise<string> {
 }
 
 /**
- * Plan A: Playwright launchPersistentContext con stealth flags.
+ * Localiza el profile real de Google Chrome del usuario en el sistema.
+ */
+function getUserChromeProfileRoot(): string | null {
+  const platform = process.platform;
+  if (platform === 'win32') {
+    const local = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
+    return path.join(local, 'Google', 'Chrome', 'User Data');
+  }
+  if (platform === 'darwin') {
+    return path.join(os.homedir(), 'Library', 'Application Support', 'Google', 'Chrome');
+  }
+  return path.join(os.homedir(), '.config', 'google-chrome');
+}
+
+interface CookieImportResult {
+  imported: boolean;
+  detail: string;
+}
+
+/**
+ * Copia las cookies + la clave de encripción del Chrome real del usuario a nuestro
+ * profile persistente. Cuando Playwright lance Chrome con este profile, opal.google
+ * va a estar YA AUTENTICADO porque las cookies de Google ya están.
+ *
+ * Esto sidestepea el flujo de sign-in donde Google bloquea Playwright como automation.
+ *
+ * Best-effort: si Chrome del usuario está abierto (cookies locked) o no existe,
+ * devuelve imported=false y caemos al flujo de login manual.
+ */
+function importUserChromeCookies(targetProfileDir: string): CookieImportResult {
+  try {
+    const userRoot = getUserChromeProfileRoot();
+    if (!userRoot || !fs.existsSync(userRoot)) {
+      return { imported: false, detail: 'no encontré Google Chrome instalado' };
+    }
+
+    const userDefault = path.join(userRoot, 'Default');
+    if (!fs.existsSync(userDefault)) {
+      return { imported: false, detail: 'no hay profile "Default" en tu Chrome' };
+    }
+
+    // Si ya hay un profile (de un install previo exitoso), no lo pisamos.
+    const existingMarkers = [
+      path.join(targetProfileDir, 'Default', 'Cookies'),
+      path.join(targetProfileDir, 'Default', 'Network', 'Cookies'),
+    ];
+    if (existingMarkers.some((p) => fs.existsSync(p))) {
+      return { imported: false, detail: 'profile previo presente — uso el existente' };
+    }
+
+    // Limpio + creo estructura.
+    if (fs.existsSync(targetProfileDir)) {
+      fs.rmSync(targetProfileDir, { recursive: true, force: true });
+    }
+    fs.mkdirSync(path.join(targetProfileDir, 'Default'), { recursive: true });
+
+    // 1. Local State — contiene la clave DPAPI para descifrar Cookies.
+    const localStateFrom = path.join(userRoot, 'Local State');
+    if (fs.existsSync(localStateFrom)) {
+      try {
+        fs.copyFileSync(localStateFrom, path.join(targetProfileDir, 'Local State'));
+      } catch {
+        return { imported: false, detail: 'no pude leer "Local State" (cerrá Chrome y reintentá)' };
+      }
+    }
+
+    // 2. Cookies — pueden estar en Default/Cookies (antiguo) o Default/Network/Cookies (Chrome 96+).
+    const cookieLocations: Array<[string, string]> = [
+      ['Cookies', 'Cookies'],
+      [path.join('Network', 'Cookies'), path.join('Network', 'Cookies')],
+    ];
+    let copiedCookies = 0;
+    for (const [fromRel, toRel] of cookieLocations) {
+      const fromPath = path.join(userDefault, fromRel);
+      const toPath = path.join(targetProfileDir, 'Default', toRel);
+      if (fs.existsSync(fromPath)) {
+        try {
+          fs.mkdirSync(path.dirname(toPath), { recursive: true });
+          fs.copyFileSync(fromPath, toPath);
+          copiedCookies++;
+        } catch {
+          // File puede estar locked si Chrome está abierto. Skip.
+        }
+      }
+    }
+
+    // 3. Preferences (UI/idioma, no auth pero ayuda al fingerprint).
+    const prefs = path.join(userDefault, 'Preferences');
+    if (fs.existsSync(prefs)) {
+      try {
+        fs.copyFileSync(prefs, path.join(targetProfileDir, 'Default', 'Preferences'));
+      } catch { /* skip */ }
+    }
+
+    if (copiedCookies === 0) {
+      return { imported: false, detail: 'cookies bloqueadas (cerrá Chrome y reintentá) o no hay sesión Google' };
+    }
+    return { imported: true, detail: `${copiedCookies} archivo(s) de cookies copiados` };
+  } catch (e: any) {
+    return { imported: false, detail: e.message };
+  }
+}
+
+/**
+ * Plan A: Playwright launchPersistentContext con stealth flags +
+ * sesión importada del Chrome real del usuario.
  */
 async function playwrightCapture(silent: boolean, timeoutMs: number): Promise<string> {
   ensureDir(AUTH_DIR);
-  ensureDir(CHROME_PROFILE_DIR);
+
+  // Antes de crear el profile, intentar importar la sesión real del usuario.
+  // Si funciona, opal.google va a estar ya logueado y no hay sign-in flow.
+  const importResult = importUserChromeCookies(CHROME_PROFILE_DIR);
+  if (importResult.imported) {
+    console.log(`      · Sesión de tu Chrome importada (${importResult.detail}).`);
+    console.log(`      · No deberías necesitar loguear — opal.google se abre ya autenticado.`);
+  } else {
+    console.log(`      · No importé tu sesión: ${importResult.detail}.`);
+    console.log(`      · Vas a tener que loguear en la ventana que aparece.`);
+    ensureDir(CHROME_PROFILE_DIR);
+  }
 
   let context: BrowserContext | null = null;
   try {

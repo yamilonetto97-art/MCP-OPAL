@@ -7,7 +7,7 @@ Servidor MCP que expone 8 herramientas para crear, listar, ejecutar, clonar y el
 ## 🚀 Instalación en un comando
 
 ```bash
-npx -y -p github:yamilonetto97-art/MCP-OPAL#v0.3.5 opal-mcp-install
+npx -y -p github:yamilonetto97-art/MCP-OPAL#v0.3.6 opal-mcp-install
 ```
 
 Eso es todo. El instalador:
@@ -26,7 +26,7 @@ Después reiniciá tu cliente MCP y probá: *"Lista mis apps de Google Opal"*.
 Si querés que tu IA lo haga por vos, pegale esto:
 
 ```text
-Instalá el MCP de Google Opal: corré `npx -y -p github:yamilonetto97-art/MCP-OPAL#v0.3.5 opal-mcp-install` y seguí lo que pida.
+Instalá el MCP de Google Opal: corré `npx -y -p github:yamilonetto97-art/MCP-OPAL#v0.3.6 opal-mcp-install` y seguí lo que pida.
 Cuando aparezca una ventana de Chrome, logueate con tu cuenta de Google.
 Al terminar, reiniciá Antigravity.
 ```
@@ -55,7 +55,7 @@ El token de acceso de Google expira cada ~1 h. Esta versión maneja la expiraci�
 Vos no te enterás de que existían tokens. Si por alguna razón el refresh silencioso falla (Google forzó re-login, cookies expiraron, etc.), corré:
 
 ```bash
-npx -y -p github:yamilonetto97-art/MCP-OPAL#v0.3.5 opal-mcp-install --refresh
+npx -y -p github:yamilonetto97-art/MCP-OPAL#v0.3.6 opal-mcp-install --refresh
 ```
 
 y volvé a loguear en la ventana que aparece.
@@ -77,10 +77,10 @@ Adentro encontrás:
 | Problema | Solución |
 |---|---|
 | `npm install -g` falla con EACCES | macOS/Linux: usá `sudo`. O configurá un prefix de npm propio en tu home. |
-| `npm install -g` falla en Windows con execution policy | Ejecutá `cmd /c "npx -y -p github:yamilonetto97-art/MCP-OPAL#v0.3.5 opal-mcp-install"` desde PowerShell, o abrí una terminal `cmd` directamente. |
+| `npm install -g` falla en Windows con execution policy | Ejecutá `cmd /c "npx -y -p github:yamilonetto97-art/MCP-OPAL#v0.3.6 opal-mcp-install"` desde PowerShell, o abrí una terminal `cmd` directamente. |
 | Chrome no se abre | Verificá que tenés Google Chrome instalado (no Chromium ni Edge). Probá `google-chrome --version` (Linux) o abriendo Chrome a mano. |
 | El MCP no aparece en Antigravity | Cerrá y abrí Antigravity. La config se cargó al inicio. |
-| Token expirado y silent refresh no anduvo | `npx -y -p github:yamilonetto97-art/MCP-OPAL#v0.3.5 opal-mcp-install --refresh` |
+| Token expirado y silent refresh no anduvo | `npx -y -p github:yamilonetto97-art/MCP-OPAL#v0.3.6 opal-mcp-install --refresh` |
 
 ## 🏗 Desarrollo
 
