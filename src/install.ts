@@ -33,6 +33,7 @@ import {
 } from './lib/paths.js';
 
 const PACKAGE_NAME = 'opal-mcp-server';
+const GITHUB_SPEC = 'github:yamilonetto97-art/MCP-OPAL';
 const MCP_ENTRY_NAME = 'google-opal';
 
 interface CliFlags {
@@ -56,8 +57,8 @@ function printHelp(): void {
 opal-mcp-install — instalador one-shot del MCP de Google Opal
 
 Uso:
-  npx -y -p opal-mcp-server opal-mcp-install            Instalación completa (recomendado)
-  npx -y -p opal-mcp-server opal-mcp-install --refresh  Solo re-capturar el token expirado
+  npx -y -p github:yamilonetto97-art/MCP-OPAL opal-mcp-install            Instalación completa (recomendado)
+  npx -y -p github:yamilonetto97-art/MCP-OPAL opal-mcp-install --refresh  Solo re-capturar el token expirado
 
 Flags:
   --refresh      Salta install + merge de config; solo recaptura el token
@@ -106,8 +107,10 @@ function runNpm(args: string[]): { ok: boolean; stdout: string; stderr: string }
   };
 }
 
-function installGlobally(version: string): void {
-  const spec = version === 'latest' ? `${PACKAGE_NAME}@latest` : `${PACKAGE_NAME}@${version}`;
+function installGlobally(_version: string): void {
+  // Fuente canonica hasta que se publique en npm:
+  // se instala desde GitHub. El repo tiene dist/ pre-compilado.
+  const spec = GITHUB_SPEC;
   console.log(`\n[1/4] Instalando ${spec} global vía npm…`);
   const res = runNpm(['install', '-g', spec]);
   if (!res.ok) {
@@ -117,7 +120,7 @@ function installGlobally(version: string): void {
       `En macOS/Linux probá con sudo. ` +
       `En Windows abrí una terminal nueva como Administrador y corré:\n` +
       `  npm install -g ${spec}\n` +
-      `Después volvé a correr: npx -y -p opal-mcp-server opal-mcp-install -- --no-install`
+      `Después volvé a correr: npx -y -p ${GITHUB_SPEC} opal-mcp-install -- --no-install`
     );
   }
   console.log('      OK');
@@ -239,7 +242,7 @@ function step_summary(serverEntry: string): void {
   console.log('   Probá: "Lista mis apps de Google Opal".');
   console.log('');
   console.log('Si el token expira en el futuro, el server intenta refrescarlo solo en background.');
-  console.log('Si eso falla, corré: npx -y -p opal-mcp-server opal-mcp-install --refresh');
+  console.log('Si eso falla, corré: npx -y -p github:yamilonetto97-art/MCP-OPAL opal-mcp-install --refresh');
 }
 
 async function refreshOnly(silent: boolean): Promise<void> {

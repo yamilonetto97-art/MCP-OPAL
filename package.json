@@ -6,15 +6,13 @@
   "main": "dist/index.js",
   "bin": {
     "opal-mcp-server": "dist/index.js",
-    "opal-mcp-auth": "dist/auth/login.js",
     "opal-mcp-install": "dist/install.js"
   },
   "scripts": {
     "build": "tsc",
-    "prepare": "tsc",
+    "prepublishOnly": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
-    "auth": "tsx src/auth/login.ts",
     "install:cli": "tsx src/install.ts"
   },
   "keywords": [

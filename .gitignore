@@ -1,5 +1,5 @@
 node_modules/
-dist/
+# dist/ se committea para permitir `npm install -g github:user/repo` sin compilar
 /auth/
 *.js.map
 .DS_Store
