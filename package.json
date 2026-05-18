@@ -10,10 +10,11 @@
   },
   "scripts": {
     "build": "tsc",
+    "prepare": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "auth": "tsx src/auth/login.ts",
-    "postinstall": "npx playwright install chromium --with-deps 2>/dev/null || npx playwright install chromium || echo 'Note: Run npx playwright install chromium manually if needed'"
+    "postinstall": "npx playwright install chromium || echo Run npx playwright install chromium manually"
   },
   "keywords": [
     "mcp",
@@ -27,13 +28,15 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/epicperuofficial/opal-mcp-server.git"
+    "url": "https://github.com/yamilonetto97-art/MCP-OPAL.git"
   },
   "engines": {
     "node": ">=18.0.0"
   },
   "files": [
     "dist",
+    "src",
+    "tsconfig.json",
     "README.md",
     "LICENSE"
   ],

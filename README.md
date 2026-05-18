@@ -106,7 +106,7 @@ Guíame paso a paso y asegúrate de que todo funcione en mi sistema operativo.
 
 ```bash
 # Clone the repo
-git clone https://github.com/epicperuofficial/opal-mcp-server.git
+git clone https://github.com/yamilonetto97-art/MCP-OPAL.git
 cd opal-mcp-server
 
 # Install dependencies
