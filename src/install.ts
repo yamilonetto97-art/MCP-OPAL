@@ -32,7 +32,7 @@ import {
 } from './lib/paths.js';
 
 const MCP_ENTRY_NAME = 'google-opal';
-const GITHUB_REPO = 'github:yamilonetto97-art/MCP-OPAL#v0.3.3';
+const GITHUB_REPO = 'github:yamilonetto97-art/MCP-OPAL#v0.3.4';
 const PACKAGE_NAME = 'opal-mcp-server';
 
 interface CliFlags {
@@ -319,7 +319,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  console.log('🔮 Google Opal MCP — Instalador v0.3.3');
+  console.log('🔮 Google Opal MCP — Instalador v0.3.4');
   console.log('======================================');
 
   if (flags.refresh) {

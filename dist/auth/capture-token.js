@@ -75,7 +75,23 @@ export async function captureToken(options = {}) {
             channel: 'chrome',
             headless: silent,
             viewport: { width: 1280, height: 800 },
-            args: ['--no-first-run', '--no-default-browser-check'],
+            // Flags de "stealth" para que Google no detecte Playwright como automation
+            // y bloquee el sign-in con "navegador no seguro".
+            args: [
+                '--no-first-run',
+                '--no-default-browser-check',
+                '--disable-blink-features=AutomationControlled',
+                '--disable-features=IsolateOrigins,site-per-process',
+            ],
+            ignoreDefaultArgs: ['--enable-automation'],
+        });
+        // Borra el marker navigator.webdriver que Playwright deja por default.
+        // Es la primera cosa que Google checkea para detectar automation.
+        await context.addInitScript(() => {
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => undefined,
+                configurable: true,
+            });
         });
         await context.addInitScript({ content: HOOK_SCRIPT });
         const page = context.pages()[0] || (await context.newPage());

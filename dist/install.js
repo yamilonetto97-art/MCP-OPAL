@@ -26,7 +26,7 @@ import { fileURLToPath } from 'url';
 import { captureToken } from './auth/capture-token.js';
 import { AUTH_DIR, TOKEN_FILE, getMcpClientTargets, ensureDir, } from './lib/paths.js';
 const MCP_ENTRY_NAME = 'google-opal';
-const GITHUB_REPO = 'github:yamilonetto97-art/MCP-OPAL#v0.3.3';
+const GITHUB_REPO = 'github:yamilonetto97-art/MCP-OPAL#v0.3.4';
 const PACKAGE_NAME = 'opal-mcp-server';
 function parseFlags(argv) {
     return {
@@ -273,7 +273,7 @@ async function main() {
         printHelp();
         return;
     }
-    console.log('🔮 Google Opal MCP — Instalador v0.3.3');
+    console.log('🔮 Google Opal MCP — Instalador v0.3.4');
     console.log('======================================');
     if (flags.refresh) {
         await refreshOnly(flags.silent);
