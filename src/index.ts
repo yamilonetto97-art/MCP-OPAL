@@ -37,10 +37,10 @@ server.tool(
       if (isAuth) {
         return { content: [{ type: 'text', text: '✅ Authenticated. Google Opal MCP is ready to use.' }] };
       } else {
-        return { content: [{ type: 'text', text: '❌ Token expired. Run "npx opal-mcp-install --refresh" in your terminal to re-authenticate.' }] };
+        return { content: [{ type: 'text', text: '❌ Token expired. Run "npx -y -p opal-mcp-server opal-mcp-install --refresh" in your terminal to re-authenticate.' }] };
       }
     } catch (error: any) {
-      return { content: [{ type: 'text', text: `❌ Not authenticated. Run "npx opal-mcp-install --refresh" in your terminal first to sign in to Google.` }] };
+      return { content: [{ type: 'text', text: `❌ Not authenticated. Run "npx -y -p opal-mcp-server opal-mcp-install --refresh" in your terminal first to sign in to Google.` }] };
     }
   }
 );

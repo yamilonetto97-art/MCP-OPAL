@@ -56,8 +56,8 @@ function printHelp(): void {
 opal-mcp-install — instalador one-shot del MCP de Google Opal
 
 Uso:
-  npx opal-mcp-install@latest            Instalación completa (recomendado)
-  npx opal-mcp-install@latest --refresh  Solo re-capturar el token expirado
+  npx -y -p opal-mcp-server opal-mcp-install            Instalación completa (recomendado)
+  npx -y -p opal-mcp-server opal-mcp-install --refresh  Solo re-capturar el token expirado
 
 Flags:
   --refresh      Salta install + merge de config; solo recaptura el token
@@ -117,7 +117,7 @@ function installGlobally(version: string): void {
       `En macOS/Linux probá con sudo. ` +
       `En Windows abrí una terminal nueva como Administrador y corré:\n` +
       `  npm install -g ${spec}\n` +
-      `Después volvé a correr: npx opal-mcp-install --no-install`
+      `Después volvé a correr: npx -y -p opal-mcp-server opal-mcp-install -- --no-install`
     );
   }
   console.log('      OK');
@@ -239,7 +239,7 @@ function step_summary(serverEntry: string): void {
   console.log('   Probá: "Lista mis apps de Google Opal".');
   console.log('');
   console.log('Si el token expira en el futuro, el server intenta refrescarlo solo en background.');
-  console.log('Si eso falla, corré: npx opal-mcp-install --refresh');
+  console.log('Si eso falla, corré: npx -y -p opal-mcp-server opal-mcp-install --refresh');
 }
 
 async function refreshOnly(silent: boolean): Promise<void> {
