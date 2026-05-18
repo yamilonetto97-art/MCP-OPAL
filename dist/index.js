@@ -21,7 +21,7 @@ import { z } from 'zod';
 import { OpalAPI } from './api/opal-api.js';
 const server = new McpServer({
     name: 'google-opal',
-    version: '0.3.0',
+    version: '0.3.1',
 });
 // --- Tool: Check Authentication ---
 server.tool('opal_check_auth', 'Check if the Google Opal MCP server is authenticated', {}, async () => {
@@ -32,11 +32,11 @@ server.tool('opal_check_auth', 'Check if the Google Opal MCP server is authentic
             return { content: [{ type: 'text', text: '✅ Authenticated. Google Opal MCP is ready to use.' }] };
         }
         else {
-            return { content: [{ type: 'text', text: '❌ Token expired. Run "npx -y -p github:yamilonetto97-art/MCP-OPAL opal-mcp-install --refresh" in your terminal to re-authenticate.' }] };
+            return { content: [{ type: 'text', text: '❌ Token expired. Run "npx -y -p github:yamilonetto97-art/MCP-OPAL#v0.3.1 opal-mcp-install --refresh" in your terminal to re-authenticate.' }] };
         }
     }
     catch (error) {
-        return { content: [{ type: 'text', text: `❌ Not authenticated. Run "npx -y -p github:yamilonetto97-art/MCP-OPAL opal-mcp-install --refresh" in your terminal first to sign in to Google.` }] };
+        return { content: [{ type: 'text', text: `❌ Not authenticated. Run "npx -y -p github:yamilonetto97-art/MCP-OPAL#v0.3.1 opal-mcp-install --refresh" in your terminal first to sign in to Google.` }] };
     }
 });
 // --- Tool: List Apps ---

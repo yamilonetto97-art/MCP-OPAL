@@ -33,7 +33,8 @@ import {
 } from './lib/paths.js';
 
 const PACKAGE_NAME = 'opal-mcp-server';
-const GITHUB_SPEC = 'github:yamilonetto97-art/MCP-OPAL';
+// Pinneamos al tag para invalidar cache de npx/npm en cada release.
+const GITHUB_SPEC = 'github:yamilonetto97-art/MCP-OPAL#v0.3.1';
 const MCP_ENTRY_NAME = 'google-opal';
 
 interface CliFlags {
@@ -57,8 +58,8 @@ function printHelp(): void {
 opal-mcp-install — instalador one-shot del MCP de Google Opal
 
 Uso:
-  npx -y -p github:yamilonetto97-art/MCP-OPAL opal-mcp-install            Instalación completa (recomendado)
-  npx -y -p github:yamilonetto97-art/MCP-OPAL opal-mcp-install --refresh  Solo re-capturar el token expirado
+  npx -y -p github:yamilonetto97-art/MCP-OPAL#v0.3.1 opal-mcp-install            Instalación completa (recomendado)
+  npx -y -p github:yamilonetto97-art/MCP-OPAL#v0.3.1 opal-mcp-install --refresh  Solo re-capturar el token expirado
 
 Flags:
   --refresh      Salta install + merge de config; solo recaptura el token
@@ -108,19 +109,29 @@ function runNpm(args: string[]): { ok: boolean; stdout: string; stderr: string }
 }
 
 function installGlobally(_version: string): void {
-  // Fuente canonica hasta que se publique en npm:
-  // se instala desde GitHub. El repo tiene dist/ pre-compilado.
+  // Fuente canónica hasta que se publique en npm: se instala desde GitHub.
+  // El repo tiene dist/ pre-compilado, así que no necesita compilar nada.
   const spec = GITHUB_SPEC;
-  console.log(`\n[1/4] Instalando ${spec} global vía npm…`);
-  const res = runNpm(['install', '-g', spec]);
+  console.log(`\n[1/4] Instalando ${spec} global vía npm (force, sin cache)…`);
+
+  // Paso 1a: desinstalar cualquier versión previa para que npm no decida "ya está".
+  console.log('      · Limpiando install previo (si existe)…');
+  runNpm(['uninstall', '-g', PACKAGE_NAME]);
+
+  // Paso 1b: limpiar el cache de tarballs/git de npm.
+  console.log('      · Limpiando cache de npm…');
+  runNpm(['cache', 'clean', '--force']);
+
+  // Paso 1c: instalar con --force para bypass de optimizaciones de cache.
+  const res = runNpm(['install', '-g', '--force', spec]);
   if (!res.ok) {
     console.error(res.stderr || res.stdout);
     throw new Error(
       `npm install -g falló. ` +
       `En macOS/Linux probá con sudo. ` +
       `En Windows abrí una terminal nueva como Administrador y corré:\n` +
-      `  npm install -g ${spec}\n` +
-      `Después volvé a correr: npx -y -p ${GITHUB_SPEC} opal-mcp-install -- --no-install`
+      `  npm install -g --force ${spec}\n` +
+      `Después volvé a correr: npx -y -p ${spec} opal-mcp-install -- --no-install`
     );
   }
   console.log('      OK');
@@ -134,8 +145,12 @@ function resolveServerEntry(): string {
   const entry = path.join(res.stdout, PACKAGE_NAME, 'dist', 'index.js');
   if (!fs.existsSync(entry)) {
     throw new Error(
-      `El paquete global no expone dist/index.js en ${entry}. ` +
-      `Probablemente el build falló — intentá: npm install -g ${PACKAGE_NAME}@latest`
+      `El paquete global no expone dist/index.js en ${entry}.\n` +
+      `Esto suele pasar por un cache podrido de npm/npx. Corré a mano:\n` +
+      `  npm uninstall -g ${PACKAGE_NAME}\n` +
+      `  npm cache clean --force\n` +
+      `  npm install -g --force ${GITHUB_SPEC}\n` +
+      `Y después: ${GITHUB_SPEC.split('#')[0].replace('github:', 'https://github.com/')} (verificá que dist/ esté ahí en GitHub).`
     );
   }
   return entry;
@@ -242,7 +257,7 @@ function step_summary(serverEntry: string): void {
   console.log('   Probá: "Lista mis apps de Google Opal".');
   console.log('');
   console.log('Si el token expira en el futuro, el server intenta refrescarlo solo en background.');
-  console.log('Si eso falla, corré: npx -y -p github:yamilonetto97-art/MCP-OPAL opal-mcp-install --refresh');
+  console.log('Si eso falla, corré: npx -y -p github:yamilonetto97-art/MCP-OPAL#v0.3.1 opal-mcp-install --refresh');
 }
 
 async function refreshOnly(silent: boolean): Promise<void> {
