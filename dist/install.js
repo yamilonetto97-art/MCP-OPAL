@@ -19,13 +19,14 @@
  *   --no-install   Salta la copia (asume que ya está en la ruta estable).
  *   --help, -h     Esta ayuda.
  */
+import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { captureToken } from './auth/capture-token.js';
 import { AUTH_DIR, TOKEN_FILE, getMcpClientTargets, ensureDir, } from './lib/paths.js';
 const MCP_ENTRY_NAME = 'google-opal';
-const GITHUB_REPO = 'github:yamilonetto97-art/MCP-OPAL#v0.3.2';
+const GITHUB_REPO = 'github:yamilonetto97-art/MCP-OPAL#v0.3.3';
 const PACKAGE_NAME = 'opal-mcp-server';
 function parseFlags(argv) {
     return {
@@ -169,6 +170,36 @@ function mergeMcpConfig(configPath, serverEntry) {
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
     return existed ? 'updated' : 'created';
 }
+/**
+ * Limpia cualquier instalación global legacy de versiones viejas (v0.3.0/0.3.1)
+ * que usaban `npm install -g`. Sin esto, npx puede preferir el bin legacy del
+ * PATH del usuario por sobre el fresh fetch del spec.
+ *
+ * Idempotente: si no hay nada que limpiar, no falla.
+ */
+function cleanupLegacyGlobalInstall() {
+    console.log('\n[0/4] Limpiando instalaciones legacy (si las hay)…');
+    const cmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+    const result = spawnSync(cmd, ['uninstall', '-g', PACKAGE_NAME], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        encoding: 'utf-8',
+        shell: process.platform === 'win32',
+    });
+    if (result.status === 0) {
+        const out = (result.stdout || '').trim();
+        if (out.includes('removed')) {
+            console.log(`      · Removido install global previo.`);
+        }
+        else {
+            console.log('      · No había install global previo (OK).');
+        }
+    }
+    else {
+        // npm uninstall puede dar warnings pero no es fatal — el flujo nuevo no depende
+        // de un estado limpio del global npm.
+        console.log('      · npm uninstall reportó algo, lo ignoro (no es fatal).');
+    }
+}
 function step_install() {
     console.log('\n[1/4] Copiando MCP server a ubicación estable…');
     const entry = installToStableLocation();
@@ -242,7 +273,7 @@ async function main() {
         printHelp();
         return;
     }
-    console.log('🔮 Google Opal MCP — Instalador v0.3.2');
+    console.log('🔮 Google Opal MCP — Instalador v0.3.3');
     console.log('======================================');
     if (flags.refresh) {
         await refreshOnly(flags.silent);
@@ -250,7 +281,7 @@ async function main() {
     }
     let serverEntry;
     if (flags.noInstall) {
-        serverEntry = path.join(getStableInstallDir(), 'dist', 'index.js');
+        serverEntry = path.join(getStableInstallDir(), 'node_modules', PACKAGE_NAME, 'dist', 'index.js');
         console.log('\n[1/4] Salto copia (--no-install). Usando install existente.');
         if (!fs.existsSync(serverEntry)) {
             throw new Error(`--no-install pero ${serverEntry} no existe. ` +
@@ -258,6 +289,7 @@ async function main() {
         }
     }
     else {
+        cleanupLegacyGlobalInstall();
         serverEntry = step_install();
     }
     step_mergeConfigs(serverEntry);
