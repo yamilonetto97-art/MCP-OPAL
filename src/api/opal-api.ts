@@ -28,6 +28,26 @@ function getAuthDir(): string {
 
 const AUTH_DIR = getAuthDir();
 const TOKEN_FILE = path.join(AUTH_DIR, 'oauth-token.json');
+const CHROME_PROFILE_DIR = path.join(AUTH_DIR, 'chrome-profile');
+
+/**
+ * Best-effort silent re-capture of the access token using a cached Chrome
+ * profile that was set up by `opal-mcp-install`. Returns the new token
+ * (also persisting it to TOKEN_FILE) or null if the profile is missing
+ * or playwright-core is not available.
+ */
+async function trySilentTokenRefresh(): Promise<string | null> {
+  if (!fs.existsSync(CHROME_PROFILE_DIR)) return null;
+  try {
+    // Dynamic import keeps playwright out of the cold-start path of the MCP server.
+    const mod = await import('../auth/capture-token.js');
+    const { accessToken } = await mod.captureToken({ silent: true, timeoutMs: 45_000 });
+    return accessToken || null;
+  } catch (err: any) {
+    console.error('[opal-mcp] silent refresh failed:', err?.message || err);
+    return null;
+  }
+}
 
 export interface OpalApp {
   id: string;
@@ -86,11 +106,8 @@ export class OpalAPI {
     }
   }
 
-  /**
-   * Make authenticated API request
-   */
   private async apiCall(url: string, options: RequestInit = {}): Promise<Response> {
-    const resp = await fetch(url, {
+    let resp = await fetch(url, {
       ...options,
       headers: {
         'Authorization': `Bearer ${this.accessToken}`,
@@ -98,10 +115,85 @@ export class OpalAPI {
         ...options.headers,
       }
     });
+
+    // Auto-refresh token if 401 Unauthorized
     if (resp.status === 401) {
-      throw new Error('Token expired. Run "opal-mcp-auth" again to re-authenticate.');
+      const refreshed = await this.refreshAccessToken();
+      if (!refreshed) {
+        throw new Error(
+          'Token expirado y no se pudo renovar automáticamente. ' +
+          'Corré: npx opal-mcp-install --refresh'
+        );
+      }
+      // Retry the original request with the new token.
+      resp = await fetch(url, {
+        ...options,
+        headers: {
+          'Authorization': `Bearer ${this.accessToken}`,
+          'Content-Type': 'application/json',
+          ...options.headers,
+        }
+      });
+      if (resp.status === 401) {
+        throw new Error(
+          'Token sigue inválido después de renovar. ' +
+          'Corré: npx opal-mcp-install --refresh (modo interactivo)'
+        );
+      }
     }
+
     return resp;
+  }
+
+  /**
+   * Renueva el access token. Estrategia:
+   *   1. Si existe refresh_token (OAuth flow clásico), usa el endpoint oficial.
+   *   2. Si no, intenta una recaptura silenciosa con el perfil de Chrome cacheado
+   *      (el que dejó `opal-mcp-install`).
+   * Devuelve true si quedó renovado en memoria + disco; false si no pudo.
+   */
+  private async refreshAccessToken(): Promise<boolean> {
+    let data: TokenData = {} as TokenData;
+    if (fs.existsSync(TOKEN_FILE)) {
+      try {
+        data = JSON.parse(fs.readFileSync(TOKEN_FILE, 'utf-8'));
+      } catch { /* ignore — treat as missing */ }
+    }
+
+    if (data.refresh_token) {
+      console.error('[opal-mcp] refrescando con refresh_token…');
+      try {
+        const tokenResp = await fetch('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            client_id: '764086051850-6qr4p6gpi6hn506pt8ejuq83di341hur.apps.googleusercontent.com',
+            refresh_token: data.refresh_token,
+            grant_type: 'refresh_token',
+          }).toString(),
+        });
+        if (tokenResp.ok) {
+          const tokens = await tokenResp.json();
+          this.accessToken = tokens.access_token;
+          data.access_token = tokens.access_token;
+          if (tokens.refresh_token) data.refresh_token = tokens.refresh_token;
+          data.expiry = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
+          fs.writeFileSync(TOKEN_FILE, JSON.stringify(data, null, 2));
+          return true;
+        }
+      } catch (err: any) {
+        console.error('[opal-mcp] refresh_token falló:', err?.message || err);
+      }
+    }
+
+    // Fallback: silent recapture using the cached Chrome profile.
+    console.error('[opal-mcp] intentando recaptura silenciosa con perfil cacheado…');
+    const newToken = await trySilentTokenRefresh();
+    if (newToken) {
+      this.accessToken = newToken;
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -166,11 +258,6 @@ export class OpalAPI {
     };
   }
 
-  /**
-   * Create a new app
-   * Note: This creates the file in Drive. The actual AI generation
-   * happens through the Opal web UI, so we create a blank template.
-   */
   async createApp(description: string): Promise<{ id: string; name: string }> {
     // Create a new Breadboard graph file in Drive
     const appName = description.slice(0, 80) || 'New Opal App';
@@ -179,7 +266,7 @@ export class OpalAPI {
       name: appName,
       mimeType: OPAL_MIME,
       properties: {
-        description: description
+        description: description.substring(0, 100)
       }
     };
 
@@ -191,11 +278,28 @@ export class OpalAPI {
 
     if (!resp.ok) {
       const error = await resp.text();
-      throw new Error(`Failed to create app: ${error}`);
+      throw new Error(`Failed to create app metadata: ${error}`);
     }
 
     const file = await resp.json();
     
+    // Upload initial empty template so it doesn't get stuck loading in UI
+    const initialContent = {
+      title: appName,
+      description: description,
+      version: "0.0.1",
+      nodes: [],
+      edges: [],
+      metadata: {
+        intent: description
+      }
+    };
+
+    await this.apiCall(`https://www.googleapis.com/upload/drive/v3/files/${file.id}?uploadType=media`, {
+      method: 'PATCH',
+      body: JSON.stringify(initialContent)
+    });
+
     return {
       id: file.id,
       name: appName

@@ -1,7 +1,9 @@
 node_modules/
 dist/
-auth/
+/auth/
 *.js.map
 .DS_Store
 Thumbs.db
 browser-state.json
+oauth-token.json
+chrome-profile/

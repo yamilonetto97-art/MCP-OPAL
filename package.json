@@ -1,19 +1,21 @@
 {
   "name": "opal-mcp-server",
-  "version": "0.2.0",
-  "description": "MCP Server for Google Opal - Control AI mini-apps via Google Drive API",
+  "version": "0.3.0",
+  "description": "MCP Server for Google Opal — control AI mini-apps via Google Drive API + persistent Chrome session",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
     "opal-mcp-server": "dist/index.js",
-    "opal-mcp-auth": "dist/auth/login.js"
+    "opal-mcp-auth": "dist/auth/login.js",
+    "opal-mcp-install": "dist/install.js"
   },
   "scripts": {
     "build": "tsc",
     "prepare": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
-    "auth": "tsx src/auth/login.ts"
+    "auth": "tsx src/auth/login.ts",
+    "install:cli": "tsx src/install.ts"
   },
   "keywords": [
     "mcp",
@@ -22,7 +24,9 @@
     "ai",
     "model-context-protocol",
     "google-drive",
-    "oauth2"
+    "oauth2",
+    "antigravity",
+    "claude"
   ],
   "license": "MIT",
   "repository": {
@@ -41,11 +45,12 @@
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
+    "playwright-core": "^1.49.0",
     "zod": "^3.24.4"
   },
   "devDependencies": {
-    "typescript": "^5.7.0",
+    "@types/node": "^22.0.0",
     "tsx": "^4.19.0",
-    "@types/node": "^22.0.0"
+    "typescript": "^5.7.0"
   }
 }

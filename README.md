@@ -1,137 +1,116 @@
 # 🔮 Google Opal MCP Server
 
-> Control [Google Opal](https://opal.google) AI mini-apps directly from your AI assistant (Antigravity, Claude Desktop, OpenCode, etc.)
+> Controlá [Google Opal](https://opal.google) directo desde tu asistente de IA (Antigravity, Claude Desktop, OpenCode, etc.).
 
-Google Opal is an experimental no-code AI platform from Google Labs that lets you create AI-powered mini-apps with natural language. This MCP server lets you **create, run, manage, and remix** Opal apps without opening a browser.
+Servidor MCP que expone 8 herramientas para crear, listar, ejecutar, clonar y eliminar mini-apps de **Google Opal** desde el chat.
 
-## ✨ What can you do?
+## 🚀 Instalación en un comando
 
-| Tool | Description |
+```bash
+npx opal-mcp-install@latest
+```
+
+Eso es todo. El instalador:
+
+1. Instala el paquete globalmente (`opal-mcp-server`).
+2. Registra la entrada `google-opal` en tu `mcp_config.json` de Antigravity (y Claude Desktop si está instalado) **sin pisar tus otros MCP servers**.
+3. Abre una ventana de Chrome para que loguees con tu cuenta de Google **una sola vez**.
+4. Captura el access token y lo guarda en disco.
+
+Después reiniciá tu cliente MCP y probá: *"Lista mis apps de Google Opal"*.
+
+> **Requisitos:** Node.js 18+ y Google Chrome instalado. El instalador NO descarga Chromium — usa el Chrome que ya tenés.
+
+## 🤖 Prompt para tu asistente
+
+Si querés que tu IA lo haga por vos, pegale esto:
+
+```text
+Instalá el MCP de Google Opal: corré `npx opal-mcp-install@latest` y seguí lo que pida.
+Cuando aparezca una ventana de Chrome, logueate con tu cuenta de Google.
+Al terminar, reiniciá Antigravity.
+```
+
+## 🛠 Herramientas disponibles
+
+| Tool | Descripción |
 |------|-------------|
-| `opal_list_apps` | List all your Opal apps |
-| `opal_create_app` | Create a new app from a description |
-| `opal_get_app` | Get app details and workflow nodes |
-| `opal_run_app` | Execute an app with input |
-| `opal_remix_app` | Clone a gallery template |
-| `opal_list_gallery` | Browse available templates |
-| `opal_delete_app` | Delete an app |
-| `opal_check_auth` | Verify authentication status |
+| `opal_check_auth` | Verifica el estado de autenticación |
+| `opal_list_apps` | Lista todas tus apps de Opal |
+| `opal_create_app` | Crea una app nueva desde una descripción |
+| `opal_get_app` | Devuelve metadata + nodos + edges |
+| `opal_run_app` | Ejecuta una app con un input |
+| `opal_remix_app` | Clona una app de la galería |
+| `opal_list_gallery` | Lista plantillas de la galería |
+| `opal_delete_app` | Manda una app a la papelera |
 
-## 🚀 Quick Install
+## 🔐 Cómo funciona la auth
 
-### Prerequisites
-- **Node.js 18+** — [Download here](https://nodejs.org/)
+El token de acceso de Google expira cada ~1 h. Esta versión maneja la expiración **automáticamente**:
 
-### Step 1: Install the package
+1. Cuando una request a Drive API da `401`, el server lanza Chrome **headless** con tu perfil cacheado.
+2. Navega a `opal.google` y captura el token nuevo (no necesitás re-loguear porque las cookies persisten).
+3. Reintenta la request original.
 
-```bash
-npm install -g opal-mcp-server
-```
-
-This will automatically download the Chromium browser needed for automation (~180MB, one-time only).
-
-### Step 2: Authenticate
+Vos no te enterás de que existían tokens. Si por alguna razón el refresh silencioso falla (Google forzó re-login, cookies expiraron, etc.), corré:
 
 ```bash
-opal-mcp-auth
+npx opal-mcp-install --refresh
 ```
 
-A Chrome window will open. Sign in with your Google account that has access to [opal.google](https://opal.google). The window closes automatically once you're logged in. **You only need to do this once.**
+y volvé a loguear en la ventana que aparece.
 
-### Step 3: Add to your AI assistant
+### Dónde se guardan las credenciales
 
-Add this to your MCP configuration file:
+| OS | Ruta |
+|---|---|
+| Windows | `%APPDATA%\opal-mcp\` |
+| macOS | `~/Library/Application Support/opal-mcp/` |
+| Linux | `~/.config/opal-mcp/` |
 
-**Antigravity** (`~/.gemini/antigravity/mcp_config.json`):
-```json
-{
-  "mcpServers": {
-    "google-opal": {
-      "command": "opal-mcp-server",
-      "args": []
-    }
-  }
-}
-```
+Adentro encontrás:
+- `oauth-token.json` — el access token actual
+- `chrome-profile/` — perfil persistente con tus cookies de Google (no lo compartas)
 
-**Claude Desktop** (`claude_desktop_config.json`):
-```json
-{
-  "mcpServers": {
-    "google-opal": {
-      "command": "opal-mcp-server",
-      "args": []
-    }
-  }
-}
-```
+## 🩹 Solución de problemas
 
-### Step 4: Use it!
+| Problema | Solución |
+|---|---|
+| `npm install -g` falla con EACCES | macOS/Linux: usá `sudo`. O configurá un prefix de npm propio en tu home. |
+| `npm install -g` falla en Windows con execution policy | Ejecutá `cmd /c "npx opal-mcp-install@latest"` desde PowerShell, o abrí una terminal `cmd` directamente. |
+| Chrome no se abre | Verificá que tenés Google Chrome instalado (no Chromium ni Edge). Probá `google-chrome --version` (Linux) o abriendo Chrome a mano. |
+| El MCP no aparece en Antigravity | Cerrá y abrí Antigravity. La config se cargó al inicio. |
+| Token expirado y silent refresh no anduvo | `npx opal-mcp-install --refresh` |
 
-Restart your AI assistant and try:
-- *"List my Google Opal apps"*
-- *"Create a new Opal app that summarizes articles"*
-- *"Show me the Opal gallery templates"*
-- *"Run my Opal app [ID] with input: Hello world"*
-
-## 📋 Installation Prompt
-
-Paste this prompt into your AI assistant to auto-install:
-
-```
-Instala y configura el servidor MCP de Google Opal por mí:
-1. Verifica que Node.js 18+ esté instalado. Si no, indícame cómo instalarlo para mi sistema operativo.
-2. Instala el paquete globalmente: npm install -g opal-mcp-server
-3. Si el postinstall de Playwright falla, ejecuta: npx playwright install chromium
-4. Ejecuta opal-mcp-auth y espera a que yo complete el inicio de sesión en el navegador.
-5. Agrega la configuración del servidor MCP a mi archivo mcp_config.json con el comando "opal-mcp-server".
-6. Verifica que funcione listando mis apps de Google Opal.
-Guíame paso a paso y asegúrate de que todo funcione en mi sistema operativo.
-```
-
-## 🔐 How Authentication Works
-
-1. `opal-mcp-auth` opens a real Chrome browser (visible)
-2. You sign in to Google normally
-3. Your session cookies are saved locally:
-   - **Windows:** `%APPDATA%\opal-mcp\browser-state.json`
-   - **macOS:** `~/Library/Application Support/opal-mcp/browser-state.json`
-   - **Linux:** `~/.config/opal-mcp/browser-state.json`
-4. The MCP server uses these cookies in headless (invisible) mode
-5. If your session expires, just run `opal-mcp-auth` again
-
-> ⚠️ **Security:** The `browser-state.json` file contains your Google session tokens. Never share it or commit it to version control.
-
-## 🛠 Development
+## 🏗 Desarrollo
 
 ```bash
-# Clone the repo
 git clone https://github.com/yamilonetto97-art/MCP-OPAL.git
-cd opal-mcp-server
-
-# Install dependencies
+cd MCP-OPAL
 npm install
-
-# Install Playwright browsers
-npx playwright install chromium
-
-# Build
 npm run build
-
-# Run auth
-npm run auth
-
-# Run server in dev mode
-npm run dev
+# probar el installer sin publicar
+npm run install:cli
 ```
 
-## ⚠️ Important Notes
+Estructura:
+```
+src/
+├── index.ts                  # MCP server (8 tools)
+├── install.ts                # opal-mcp-install CLI
+├── api/opal-api.ts           # Drive API client + silent refresh
+├── auth/
+│   ├── capture-token.ts      # Playwright + persistent profile
+│   └── login.ts              # OAuth2 loopback (fallback)
+└── lib/paths.ts              # rutas + detección de clientes MCP
+```
 
-- **Google Opal is experimental** — Google may change or remove it at any time
-- **No official API** — This server automates the web interface using Playwright
-- **Session may expire** — Re-run `opal-mcp-auth` if authentication fails
-- **One session at a time** — Don't use Opal in your browser while the MCP is running
+## ⚠️ Advertencias
 
-## 📄 License
+- **Google Opal es experimental** — Google puede cambiar o cerrar el producto sin aviso.
+- **Sin API pública** — Este server depende de la API interna de Google Drive + reverse-engineering del header de auth de Opal. Si Google cambia el flujo de auth, hay que adaptarlo.
+- **El perfil de Chrome cacheado tiene tu sesión de Google.** Tratalo como una credencial: no lo subas a Git, no lo compartas.
 
-MIT — Built by [EPIC Peru](https://github.com/epicperuofficial)
+## 📄 Licencia
+
+MIT — Hecho por [EPIC Perú](https://generaapp.com) 🇵🇪
