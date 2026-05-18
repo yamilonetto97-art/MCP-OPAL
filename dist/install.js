@@ -26,6 +26,7 @@ import { captureToken } from './auth/capture-token.js';
 import { AUTH_DIR, TOKEN_FILE, getMcpClientTargets, ensureDir, } from './lib/paths.js';
 const MCP_ENTRY_NAME = 'google-opal';
 const GITHUB_REPO = 'github:yamilonetto97-art/MCP-OPAL#v0.3.2';
+const PACKAGE_NAME = 'opal-mcp-server';
 function parseFlags(argv) {
     return {
         refresh: argv.includes('--refresh'),
@@ -69,58 +70,67 @@ function getStableInstallDir() {
     return path.join(process.env.XDG_DATA_HOME || path.join(home, '.local', 'share'), 'opal-mcp', 'server');
 }
 /**
- * Detecta dónde vive el paquete actualmente en ejecución.
- * Cuando npx corre `opal-mcp-install`, este archivo es
- * <npx-cache>/node_modules/opal-mcp-server/dist/install.js
- * por lo que la raíz del paquete es subir dos niveles.
+ * Detecta la raíz del install (donde está el node_modules con deps hoisted).
+ *
+ * Cuando npx corre `opal-mcp-install`, este archivo está en:
+ *   <npx-cache>/node_modules/opal-mcp-server/dist/install.js
+ *
+ * npm hoistea las deps a node_modules/ (siblings del paquete), no dentro.
+ * Necesitamos copiar el node_modules ENTERO para llevar el paquete + sus deps.
  */
-function getCurrentPackageRoot() {
+function getInstallSourceRoot() {
     const here = path.dirname(fileURLToPath(import.meta.url));
-    return path.resolve(here, '..');
+    const packageRoot = path.resolve(here, '..'); // .../node_modules/opal-mcp-server
+    const nodeModulesDir = path.resolve(packageRoot, '..'); // .../node_modules
+    if (path.basename(nodeModulesDir) !== 'node_modules') {
+        throw new Error(`Estructura inesperada — packageRoot=${packageRoot} no está bajo node_modules. ` +
+            `Esto puede pasar si corriste install.js directamente desde el repo en vez de via npx.`);
+    }
+    return { packageRoot, nodeModulesDir };
 }
 /**
- * Copia el paquete completo (dist + node_modules + package.json + ...) desde
- * el cache de npx a la ruta estable. Atómico-ish: limpia y re-copia.
+ * Copia el node_modules entero (paquete + deps hoisted) a una ubicación estable.
+ * Esto sidestepea por completo el comportamiento opaco de `npm install -g` en Windows.
  */
 function installToStableLocation() {
-    const src = getCurrentPackageRoot();
+    const { packageRoot, nodeModulesDir } = getInstallSourceRoot();
     const dst = getStableInstallDir();
-    console.log(`      · Origen: ${src}`);
-    console.log(`      · Destino: ${dst}`);
-    // Sanity check: el origen DEBE tener dist/index.js (lo que vamos a copiar).
-    const srcEntry = path.join(src, 'dist', 'index.js');
+    const dstNodeModules = path.join(dst, 'node_modules');
+    console.log(`      · Origen (paquete): ${packageRoot}`);
+    console.log(`      · Origen (deps):    ${nodeModulesDir}`);
+    console.log(`      · Destino:          ${dst}`);
+    // Sanity check del origen.
+    const srcEntry = path.join(packageRoot, 'dist', 'index.js');
     if (!fs.existsSync(srcEntry)) {
-        throw new Error(`El paquete que se está ejecutando no tiene ${srcEntry}.\n` +
-            `Esto significa que el tarball que descargó npx está roto. Probá:\n` +
-            `  1. Borrá el cache de npx: rm -rf "%LOCALAPPDATA%\\npm-cache\\_npx" (Windows)\n` +
-            `  2. Reintentá el comando original.`);
+        throw new Error(`El paquete origen no tiene ${srcEntry}. El tarball está roto.`);
     }
-    // Limpieza atómica: borrar el destino entero antes de copiar.
+    // Limpieza atómica del destino entero.
     if (fs.existsSync(dst)) {
         console.log('      · Limpiando install previo…');
         fs.rmSync(dst, { recursive: true, force: true });
     }
-    fs.mkdirSync(dst, { recursive: true });
-    // Copia recursiva. cpSync es nativo desde Node 16.7+. Node 18+ es estable.
-    console.log('      · Copiando archivos…');
-    fs.cpSync(src, dst, {
+    fs.mkdirSync(dstNodeModules, { recursive: true });
+    // Copia el node_modules entero (incluye el paquete + todas las deps hoisted).
+    console.log('      · Copiando node_modules entero (paquete + deps)…');
+    fs.cpSync(nodeModulesDir, dstNodeModules, {
         recursive: true,
         dereference: false,
         errorOnExist: false,
         force: true,
     });
-    const dstEntry = path.join(dst, 'dist', 'index.js');
+    // El entry point real: <dst>/node_modules/opal-mcp-server/dist/index.js
+    const dstEntry = path.join(dstNodeModules, PACKAGE_NAME, 'dist', 'index.js');
     if (!fs.existsSync(dstEntry)) {
-        throw new Error(`Después de copiar a ${dst}, dist/index.js no aparece. ` +
-            `Esto NO debería pasar — reportar como bug.`);
+        throw new Error(`Copy falló: ${dstEntry} no existe después de copiar.`);
     }
-    // Verificación adicional: node_modules debe estar presente para que
-    // el server pueda importar @modelcontextprotocol/sdk, playwright-core, zod.
-    const nm = path.join(dst, 'node_modules');
-    if (!fs.existsSync(nm)) {
-        throw new Error(`Después de copiar a ${dst}, node_modules no aparece. ` +
-            `npx debería haber instalado las deps antes de correr este script. ` +
-            `Probá reintentar con: npx --yes ${GITHUB_REPO}\n`);
+    // Verificación de deps críticas.
+    const criticalDeps = ['@modelcontextprotocol/sdk', 'playwright-core', 'zod'];
+    for (const dep of criticalDeps) {
+        const depPath = path.join(dstNodeModules, dep);
+        if (!fs.existsSync(depPath)) {
+            throw new Error(`Dep crítica falta: ${depPath}. ` +
+                `npx debió instalar deps antes de correr install. Reintentá con: npx --yes ${GITHUB_REPO}`);
+        }
     }
     return dstEntry;
 }
