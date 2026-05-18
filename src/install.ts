@@ -32,13 +32,14 @@ import {
 } from './lib/paths.js';
 
 const MCP_ENTRY_NAME = 'google-opal';
-const GITHUB_REPO = 'github:yamilonetto97-art/MCP-OPAL#v0.3.4';
+const GITHUB_REPO = 'github:yamilonetto97-art/MCP-OPAL#v0.3.5';
 const PACKAGE_NAME = 'opal-mcp-server';
 
 interface CliFlags {
   refresh: boolean;
   silent: boolean;
   noInstall: boolean;
+  manual: boolean;
   help: boolean;
 }
 
@@ -47,6 +48,7 @@ function parseFlags(argv: string[]): CliFlags {
     refresh: argv.includes('--refresh'),
     silent: argv.includes('--silent'),
     noInstall: argv.includes('--no-install'),
+    manual: argv.includes('--manual'),
     help: argv.includes('--help') || argv.includes('-h'),
   };
 }
@@ -63,6 +65,7 @@ Flags:
   --refresh      Salta install + merge de config; solo recaptura el token
   --silent       Fuerza Chrome headless (solo funciona si ya hubo login previo)
   --no-install   Salta la copia (asume que el server ya está en la ruta estable)
+  --manual       Salta Playwright, va directo al modo manual (Plan B)
   --help, -h     Muestra esta ayuda
 
 Después de la instalación, reiniciá tu cliente MCP (Antigravity / Claude Desktop)
@@ -272,22 +275,23 @@ function step_mergeConfigs(serverEntry: string): void {
   }
 }
 
-async function step_captureToken(silent: boolean): Promise<void> {
+async function step_captureToken(silent: boolean, manual: boolean): Promise<void> {
   console.log('\n[3/4] Capturando token de Google Opal…');
-  if (!silent) {
-    console.log('      Se va a abrir una ventana de Chrome.');
-    console.log('      Iniciá sesión con tu cuenta de Google que tiene acceso a Opal.');
-    console.log('      Cuando veas "Your Opal apps", la ventana se cerrará sola.');
+  if (manual) {
+    console.log('      Modo manual forzado (--manual).');
+  } else if (!silent) {
+    console.log('      Plan A: se abre Chrome y vos logueás. Si Google bloquea o algo falla,');
+    console.log('      automáticamente paso a Plan B (instrucciones manuales).');
   }
   ensureDir(AUTH_DIR);
   try {
-    const { savedTo } = await captureToken({ silent });
+    const { savedTo } = await captureToken({ silent, manual });
     console.log(`      OK — token guardado en: ${savedTo}`);
   } catch (err: any) {
     throw new Error(
-      `No pude capturar el token: ${err.message}\n` +
-      `Verificá que: (1) Chrome esté instalado, (2) tu cuenta de Google tenga acceso a https://opal.google, ` +
-      `(3) no haya un firewall bloqueando la ejecución.`
+      `No pude capturar el token (Plan A ni Plan B funcionaron): ${err.message}\n` +
+      `Verificá que: (1) tu cuenta de Google tenga acceso aprobado a https://opal.google, ` +
+      `(2) no haya un firewall bloqueando, (3) el token que pegaste empiece con "ya29.".`
     );
   }
 }
@@ -306,9 +310,9 @@ function step_summary(serverEntry: string): void {
   console.log(`Si eso falla, corré: npx -y -p ${GITHUB_REPO} opal-mcp-install --refresh`);
 }
 
-async function refreshOnly(silent: boolean): Promise<void> {
+async function refreshOnly(silent: boolean, manual: boolean): Promise<void> {
   console.log('🔄 Refrescando token de Google Opal…');
-  await step_captureToken(silent);
+  await step_captureToken(silent, manual);
   console.log('✅ Token renovado. Ya podés volver a usar las tools de Opal.');
 }
 
@@ -319,11 +323,11 @@ async function main(): Promise<void> {
     return;
   }
 
-  console.log('🔮 Google Opal MCP — Instalador v0.3.4');
+  console.log('🔮 Google Opal MCP — Instalador v0.3.5');
   console.log('======================================');
 
   if (flags.refresh) {
-    await refreshOnly(flags.silent);
+    await refreshOnly(flags.silent, flags.manual);
     return;
   }
 
@@ -343,7 +347,7 @@ async function main(): Promise<void> {
   }
 
   step_mergeConfigs(serverEntry);
-  await step_captureToken(flags.silent);
+  await step_captureToken(flags.silent, flags.manual);
   step_summary(serverEntry);
 }
 

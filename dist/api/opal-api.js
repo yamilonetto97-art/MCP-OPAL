@@ -90,7 +90,7 @@ export class OpalAPI {
             const refreshed = await this.refreshAccessToken();
             if (!refreshed) {
                 throw new Error('Token expirado y no se pudo renovar automáticamente. ' +
-                    'Corré: npx -y -p github:yamilonetto97-art/MCP-OPAL#v0.3.4 opal-mcp-install --refresh');
+                    'Corré: npx -y -p github:yamilonetto97-art/MCP-OPAL#v0.3.5 opal-mcp-install --refresh');
             }
             // Retry the original request with the new token.
             resp = await fetch(url, {
@@ -103,7 +103,7 @@ export class OpalAPI {
             });
             if (resp.status === 401) {
                 throw new Error('Token sigue inválido después de renovar. ' +
-                    'Corré: npx -y -p github:yamilonetto97-art/MCP-OPAL#v0.3.4 opal-mcp-install --refresh (modo interactivo)');
+                    'Corré: npx -y -p github:yamilonetto97-art/MCP-OPAL#v0.3.5 opal-mcp-install --refresh (modo interactivo)');
             }
         }
         return resp;

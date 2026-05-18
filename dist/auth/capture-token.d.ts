@@ -5,17 +5,20 @@ export interface CaptureOptions {
     timeoutMs?: number;
     /** If true, do not save the token to disk — return it only. */
     noPersist?: boolean;
+    /** Skip Playwright entirely and go straight to manual mode. */
+    manual?: boolean;
 }
 export interface CaptureResult {
     accessToken: string;
     savedTo: string | null;
 }
 /**
- * Launch a persistent Chrome with the cached profile and capture the ya29 access token
- * that Opal sends in its Authorization headers.
+ * Captura el access token de Google Opal.
  *
- * - silent=false (default): opens a visible window so the user can sign in once.
- * - silent=true: headless refresh using the saved profile (requires a prior interactive run).
+ * Plan A (default): Playwright con stealth → captura automática.
+ * Plan B (fallback o --manual): instrucciones manuales para DevTools.
+ *
+ * Si Plan A falla y NO estamos en silent mode, cae a Plan B automáticamente.
  */
 export declare function captureToken(options?: CaptureOptions): Promise<CaptureResult>;
 //# sourceMappingURL=capture-token.d.ts.map
